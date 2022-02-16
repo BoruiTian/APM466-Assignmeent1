@@ -1,0 +1,601 @@
+---
+title: "APM466 Assignment1"
+author: "Borui Tian"
+date: "2022/2/5"
+output: pdf_document
+---
+
+First of all, we load the dataset for selected bond prices
+```{r}
+bondprice <- read.csv("A1.csv")
+```
+
+# 4(a) Since except for CAN 0.75 Jan 31 24 and CAN 1.5 Aug 31 24 whose terms are 7 months apart, all other bonds’ terms are 6 months apart from each other, using semi-annual compounding instead of instantaneous compounding seems more appropriate. I will use today as Jan 31 2022 to calculate YTM. This only 1 months difference can be negligible in this case, so I will use 6 months term difference to calculate everything.  
+```{r}
+# Need to calculate the dirty prices before move on the calculate YTM
+# clean price is the price from market data, n is the number of days from the last coupon payment to the data when clean price is quoted, here we build a function to calculate dirty price of bonds
+dirtyprice <- function(cleanprice, n) {
+  dp <- cleanprice + n/365
+  return(dp)
+}
+
+# Now we calculate all the dirty prices
+dp1.10 <- dirtyprice(bondprice$X2022.1.10,bondprice$nto1.10)
+dp1.11 <- dirtyprice(bondprice$X2022.1.11,bondprice$nto1.11)
+dp1.12 <- dirtyprice(bondprice$X2022.1.12,bondprice$nto1.12)
+dp1.13 <- dirtyprice(bondprice$X2022.1.13,bondprice$nto1.13)
+dp1.14 <- dirtyprice(bondprice$X2022.1.14,bondprice$nto1.14)
+dp1.17 <- dirtyprice(bondprice$X2022.1.17,bondprice$nto1.17)
+dp1.18 <- dirtyprice(bondprice$X2022.1.18,bondprice$nto1.18)
+dp1.19 <- dirtyprice(bondprice$X2022.1.19,bondprice$nto1.19)
+dp1.20 <- dirtyprice(bondprice$X2022.1.20,bondprice$nto1.20)
+dp1.21 <- dirtyprice(bondprice$X2022.1.21,bondprice$nto1.21)
+
+# Create a new data frame consists only of dirty prices
+dirtyp <- cbind(dp1.10, dp1.11, dp1.12, dp1.13, dp1.14, dp1.17, dp1.18, dp1.19, dp1.20, dp1.21)
+
+# changes the row names of dirty prices to the bond names
+rownames(dirtyp) <-bondprice$Name
+```
+
+# Now we have the dirty prices, we will calculate YTM by the formula dirty price = sigma pi*(1+ytm/n)^-ti*n, in our case, all bonds are semi-annual compounding so n = 2.
+```{r}
+# Now we build  functions to calculate YTM 
+# First we build a function to create cash flow, cp represents coupon payment, nc is the number of total coupon payment, then we add 100 which is the face value at the end. Coupon payment of each bond is already calculated and listed in the last column of table "bondprice"
+cashflow <- function(cp, nc, dp) {
+  # build a vector of length number of coupon payments+1
+  cf <- vector(, nc+1)
+  # replace all elements of the elements with coupon payment
+  cf <- replace(cf,,cp)
+  # replace the last element with coupon payment + face value
+  cf[length(cf)] <- cp+100
+  # replace the first element with negative dirty price
+  cf[1] = -dp
+  return(cf)
+}
+
+# Create bond valuation function
+bval <- function(i, cf,
+     t=seq(along = cf))
+  # write out the valuation equation
+     sum(cf / (1 + i)^t)
+
+# Create ytm() function using uniroot
+ytm <- function(cf) {
+    uniroot(bval, c(0, 1), cf = cf)$root
+}
+
+# It quite surprises me that the bond CAN 0.25 Jul 31 22 that matures in 6 months from Today(Jan 31) has negative yield when I use dirty price to calculate. Since there is only 1 coupon payment left(the one right before date of maturity), and the coupon payment is too low 0.25% annually, 0.125% semi-annually. Further it makes sense that current interest rate is really low, thus the return of this bond is really low, resulting in the bond price to be  high to have a negative yield.
+
+# since the above ytm functions works a little weird to me on that negative yield bond
+# Build another ytm calculator for this bond CAN 0.25 Jul 31 22
+# Here, dp is dirty price and cf is coupon payment + face value
+ytm1 <- function(dp,cf) {
+  # ytm of this bond is simply (last coupon payment + face value)/dirty price -1
+  ytm1 <- cf/dp -1
+  return(ytm1)
+}
+```
+
+# Now, I have build all the tools needed to calculate ytm. I will do the calculations now
+```{r}
+# calculate the ytm of bond CAN 0.25 Jul 31 22 using ytm1 function since it has negative yield
+ytmCAN0.25Jul3122 <- ytm1(dirtyp[1,],100.125)
+
+# calculate the ytm of bond CAN 0.25 Jan 31 23 using the ytm function, note that we can fit the cashflow function into the ytm function, this can help us reduce some step.
+ytmCAN0.25Jan3123at1.10 <- ytm(cashflow(0.125, 2, dirtyp[2,1]))
+ytmCAN0.25Jan3123at1.11 <- ytm(cashflow(0.125, 2, dirtyp[2,2]))
+ytmCAN0.25Jan3123at1.12 <- ytm(cashflow(0.125, 2, dirtyp[2,3]))
+ytmCAN0.25Jan3123at1.13 <- ytm(cashflow(0.125, 2, dirtyp[2,4]))
+ytmCAN0.25Jan3123at1.14 <- ytm(cashflow(0.125, 2, dirtyp[2,5]))
+ytmCAN0.25Jan3123at1.17 <- ytm(cashflow(0.125, 2, dirtyp[2,6]))
+ytmCAN0.25Jan3123at1.18 <- ytm(cashflow(0.125, 2, dirtyp[2,7]))
+ytmCAN0.25Jan3123at1.19 <- ytm(cashflow(0.125, 2, dirtyp[2,8]))
+ytmCAN0.25Jan3123at1.20 <- ytm(cashflow(0.125, 2, dirtyp[2,9]))
+ytmCAN0.25Jan3123at1.21 <- ytm(cashflow(0.125, 2, dirtyp[2,10]))
+# Create a vector which contain these ytms of bond CAN 0.25 Jan 31 23 that are calculated by dirty prices from 1.10 to 1.21, this step will make the latter plotting easier 
+ytmCAN0.25Jan3123 <- c(ytmCAN0.25Jan3123at1.10, ytmCAN0.25Jan3123at1.11, ytmCAN0.25Jan3123at1.12, ytmCAN0.25Jan3123at1.13, ytmCAN0.25Jan3123at1.14, ytmCAN0.25Jan3123at1.17, ytmCAN0.25Jan3123at1.18, ytmCAN0.25Jan3123at1.19, ytmCAN0.25Jan3123at1.20, ytmCAN0.25Jan3123at1.21)
+
+# calculate the ytm of the next bond CAN 0.25 Jul 31 23 using the ytm function
+ytmCAN0.25Jul3123at1.10 <- ytm(cashflow(0.125, 3, dirtyp[3,1]))
+ytmCAN0.25Jul3123at1.11 <- ytm(cashflow(0.125, 3, dirtyp[3,2]))
+ytmCAN0.25Jul3123at1.12 <- ytm(cashflow(0.125, 3, dirtyp[3,3]))
+ytmCAN0.25Jul3123at1.13 <- ytm(cashflow(0.125, 3, dirtyp[3,4]))
+ytmCAN0.25Jul3123at1.14 <- ytm(cashflow(0.125, 3, dirtyp[3,5]))
+ytmCAN0.25Jul3123at1.17 <- ytm(cashflow(0.125, 3, dirtyp[3,6]))
+ytmCAN0.25Jul3123at1.18 <- ytm(cashflow(0.125, 3, dirtyp[3,7]))
+ytmCAN0.25Jul3123at1.19 <- ytm(cashflow(0.125, 3, dirtyp[3,8]))
+ytmCAN0.25Jul3123at1.20 <- ytm(cashflow(0.125, 3, dirtyp[3,9]))
+ytmCAN0.25Jul3123at1.21 <- ytm(cashflow(0.125, 3, dirtyp[3,10]))
+# Create a vector which contain these ytms of bond CAN 0.25 Jan 31 23 that are calculated by dirty prices from 1.10 to 1.21
+ytmCAN0.25Jul3123 <- c(ytmCAN0.25Jul3123at1.10, ytmCAN0.25Jul3123at1.11, ytmCAN0.25Jul3123at1.12, ytmCAN0.25Jul3123at1.13, ytmCAN0.25Jul3123at1.14, ytmCAN0.25Jul3123at1.17, ytmCAN0.25Jul3123at1.18, ytmCAN0.25Jul3123at1.19, ytmCAN0.25Jul3123at1.20, ytmCAN0.25Jul3123at1.21)
+
+# Repeat the above process to calculate the ytm of all bonds at dirty prices from 1.10 to 1.21
+# ytms of bond CAN0.75Jan3124
+ytmCAN0.75Jan3124at1.10 <- ytm(cashflow(0.375, 4, dirtyp[4,1]))
+ytmCAN0.75Jan3124at1.11 <- ytm(cashflow(0.375, 4, dirtyp[4,2]))
+ytmCAN0.75Jan3124at1.12 <- ytm(cashflow(0.375, 4, dirtyp[4,3]))
+ytmCAN0.75Jan3124at1.13 <- ytm(cashflow(0.375, 4, dirtyp[4,4]))
+ytmCAN0.75Jan3124at1.14 <- ytm(cashflow(0.375, 4, dirtyp[4,5]))
+ytmCAN0.75Jan3124at1.17 <- ytm(cashflow(0.375, 4, dirtyp[4,6]))
+ytmCAN0.75Jan3124at1.18 <- ytm(cashflow(0.375, 4, dirtyp[4,7]))
+ytmCAN0.75Jan3124at1.19 <- ytm(cashflow(0.375, 4, dirtyp[4,8]))
+ytmCAN0.75Jan3124at1.20 <- ytm(cashflow(0.375, 4, dirtyp[4,9]))
+ytmCAN0.75Jan3124at1.21 <- ytm(cashflow(0.375, 4, dirtyp[4,10]))
+
+ytmCAN0.75Jan3124 <- c(ytmCAN0.75Jan3124at1.10, ytmCAN0.75Jan3124at1.11, ytmCAN0.75Jan3124at1.12, ytmCAN0.75Jan3124at1.13, ytmCAN0.75Jan3124at1.14, ytmCAN0.75Jan3124at1.17, ytmCAN0.75Jan3124at1.18, ytmCAN0.75Jan3124at1.19, ytmCAN0.75Jan3124at1.20, ytmCAN0.75Jan3124at1.21)
+
+# ytms of bond CAN 1.5 Aug 31 24
+ytmCAN1.5Aug3124at1.10 <- ytm(cashflow(0.75, 5, dirtyp[5,1]))
+ytmCAN1.5Aug3124at1.11 <- ytm(cashflow(0.75, 5, dirtyp[5,2]))
+ytmCAN1.5Aug3124at1.12 <- ytm(cashflow(0.75, 5, dirtyp[5,3]))
+ytmCAN1.5Aug3124at1.13 <- ytm(cashflow(0.75, 5, dirtyp[5,4]))
+ytmCAN1.5Aug3124at1.14 <- ytm(cashflow(0.75, 5, dirtyp[5,5]))
+ytmCAN1.5Aug3124at1.17 <- ytm(cashflow(0.75, 5, dirtyp[5,6]))
+ytmCAN1.5Aug3124at1.18 <- ytm(cashflow(0.75, 5, dirtyp[5,7]))
+ytmCAN1.5Aug3124at1.19 <- ytm(cashflow(0.75, 5, dirtyp[5,8]))
+ytmCAN1.5Aug3124at1.20 <- ytm(cashflow(0.75, 5, dirtyp[5,9]))
+ytmCAN1.5Aug3124at1.21 <- ytm(cashflow(0.75, 5, dirtyp[5,10]))
+
+ytmCAN1.5Aug3124 <- c(ytmCAN1.5Aug3124at1.10, ytmCAN1.5Aug3124at1.11, ytmCAN1.5Aug3124at1.12, ytmCAN1.5Aug3124at1.13, ytmCAN1.5Aug3124at1.14, ytmCAN1.5Aug3124at1.17, ytmCAN1.5Aug3124at1.18, ytmCAN1.5Aug3124at1.19, ytmCAN1.5Aug3124at1.20, ytmCAN1.5Aug3124at1.21)
+```
+
+# Calculate the ytms of the rest of the 5 bonds dirty prices from 1.10 to 1.21
+```{r}
+# ytms of bond 4CAN 1.25 Feb 28 25
+ytmCAN1.25Feb2825at1.10 <- ytm(cashflow(0.625, 6, dirtyp[6,1]))
+ytmCAN1.25Feb2825at1.11 <- ytm(cashflow(0.625, 6, dirtyp[6,2]))
+ytmCAN1.25Feb2825at1.12 <- ytm(cashflow(0.625, 6, dirtyp[6,3]))
+ytmCAN1.25Feb2825at1.13 <- ytm(cashflow(0.625, 6, dirtyp[6,4]))
+ytmCAN1.25Feb2825at1.14 <- ytm(cashflow(0.625, 6, dirtyp[6,5]))
+ytmCAN1.25Feb2825at1.17 <- ytm(cashflow(0.625, 6, dirtyp[6,6]))
+ytmCAN1.25Feb2825at1.18 <- ytm(cashflow(0.625, 6, dirtyp[6,7]))
+ytmCAN1.25Feb2825at1.19 <- ytm(cashflow(0.625, 6, dirtyp[6,8]))
+ytmCAN1.25Feb2825at1.20 <- ytm(cashflow(0.625, 6, dirtyp[6,9]))
+ytmCAN1.25Feb2825at1.21 <- ytm(cashflow(0.625, 6, dirtyp[6,10]))
+
+ytmCAN1.25Feb2825 <- c(ytmCAN1.25Feb2825at1.10, ytmCAN1.25Feb2825at1.11, ytmCAN1.25Feb2825at1.12, ytmCAN1.25Feb2825at1.13, ytmCAN1.25Feb2825at1.14, ytmCAN1.25Feb2825at1.17, ytmCAN1.25Feb2825at1.18, ytmCAN1.25Feb2825at1.19, ytmCAN1.25Feb2825at1.20, ytmCAN1.25Feb2825at1.21)
+
+# ytms of bond CAN 0.5 Aug 31 25
+ytmCAN0.5Aug3125at1.10 <- ytm(cashflow(0.25, 7, dirtyp[7,1]))
+ytmCAN0.5Aug3125at1.11 <- ytm(cashflow(0.25, 7, dirtyp[7,2]))
+ytmCAN0.5Aug3125at1.12 <- ytm(cashflow(0.25, 7, dirtyp[7,3]))
+ytmCAN0.5Aug3125at1.13 <- ytm(cashflow(0.25, 7, dirtyp[7,4]))
+ytmCAN0.5Aug3125at1.14 <- ytm(cashflow(0.25, 7, dirtyp[7,5]))
+ytmCAN0.5Aug3125at1.17 <- ytm(cashflow(0.25, 7, dirtyp[7,6]))
+ytmCAN0.5Aug3125at1.18 <- ytm(cashflow(0.25, 7, dirtyp[7,7]))
+ytmCAN0.5Aug3125at1.19 <- ytm(cashflow(0.25, 7, dirtyp[7,8]))
+ytmCAN0.5Aug3125at1.20 <- ytm(cashflow(0.25, 7, dirtyp[7,9]))
+ytmCAN0.5Aug3125at1.21 <- ytm(cashflow(0.25, 7, dirtyp[7,10]))
+
+ytmCAN0.5Aug3125 <- c(ytmCAN0.5Aug3125at1.10, ytmCAN0.5Aug3125at1.11, ytmCAN0.5Aug3125at1.12, ytmCAN0.5Aug3125at1.13, ytmCAN0.5Aug3125at1.14, ytmCAN0.5Aug3125at1.17, ytmCAN0.5Aug3125at1.18, ytmCAN0.5Aug3125at1.19, ytmCAN0.5Aug3125at1.20, ytmCAN0.5Aug3125at1.21)
+
+# ytms of bond CAN 0.25 Feb 28 26
+ytmCAN0.25Feb2826at1.10 <- ytm(cashflow(0.125, 8, dirtyp[8,1]))
+ytmCAN0.25Feb2826at1.11 <- ytm(cashflow(0.125, 8, dirtyp[8,2]))
+ytmCAN0.25Feb2826at1.12 <- ytm(cashflow(0.125, 8, dirtyp[8,3]))
+ytmCAN0.25Feb2826at1.13 <- ytm(cashflow(0.125, 8, dirtyp[8,4]))
+ytmCAN0.25Feb2826at1.14 <- ytm(cashflow(0.125, 8, dirtyp[8,5]))
+ytmCAN0.25Feb2826at1.17 <- ytm(cashflow(0.125, 8, dirtyp[8,6]))
+ytmCAN0.25Feb2826at1.18 <- ytm(cashflow(0.125, 8, dirtyp[8,7]))
+ytmCAN0.25Feb2826at1.19 <- ytm(cashflow(0.125, 8, dirtyp[8,8]))
+ytmCAN0.25Feb2826at1.20 <- ytm(cashflow(0.125, 8, dirtyp[8,9]))
+ytmCAN0.25Feb2826at1.21 <- ytm(cashflow(0.125, 8, dirtyp[8,10]))
+
+ytmCAN0.25Feb2826 <- c(ytmCAN0.25Feb2826at1.10, ytmCAN0.25Feb2826at1.11, ytmCAN0.25Feb2826at1.12, ytmCAN0.25Feb2826at1.13, ytmCAN0.25Feb2826at1.14, ytmCAN0.25Feb2826at1.17, ytmCAN0.25Feb2826at1.18, ytmCAN0.25Feb2826at1.19, ytmCAN0.25Feb2826at1.20, ytmCAN0.25Feb2826at1.21)
+
+# ytms of bond CAN 1 Aug 31 26
+ytmsCAN1Aug3126at1.10 <- ytm(cashflow(0.5, 9, dirtyp[9,1]))
+ytmsCAN1Aug3126at1.11 <- ytm(cashflow(0.5, 9, dirtyp[9,2]))
+ytmsCAN1Aug3126at1.12 <- ytm(cashflow(0.5, 9, dirtyp[9,3]))
+ytmsCAN1Aug3126at1.13 <- ytm(cashflow(0.5, 9, dirtyp[9,4]))
+ytmsCAN1Aug3126at1.14 <- ytm(cashflow(0.5, 9, dirtyp[9,5]))
+ytmsCAN1Aug3126at1.17 <- ytm(cashflow(0.5, 9, dirtyp[9,6]))
+ytmsCAN1Aug3126at1.18 <- ytm(cashflow(0.5, 9, dirtyp[9,7]))
+ytmsCAN1Aug3126at1.19 <- ytm(cashflow(0.5, 9, dirtyp[9,8]))
+ytmsCAN1Aug3126at1.20 <- ytm(cashflow(0.5, 9, dirtyp[9,9]))
+ytmsCAN1Aug3126at1.21 <- ytm(cashflow(0.5, 9, dirtyp[9,10]))
+
+ytmsCAN1Aug3126 <- c(ytmsCAN1Aug3126at1.10, ytmsCAN1Aug3126at1.11, ytmsCAN1Aug3126at1.12, ytmsCAN1Aug3126at1.13, ytmsCAN1Aug3126at1.14, ytmsCAN1Aug3126at1.17, ytmsCAN1Aug3126at1.18, ytmsCAN1Aug3126at1.19, ytmsCAN1Aug3126at1.20, ytmsCAN1Aug3126at1.21)
+
+# ytms of bond CAN 1.25 Feb 28 27
+ytmCAN1.25Feb2827at1.10 <- ytm(cashflow(0.625, 10, dirtyp[10,1]))
+ytmCAN1.25Feb2827at1.11 <- ytm(cashflow(0.625, 10, dirtyp[10,2]))
+ytmCAN1.25Feb2827at1.12 <- ytm(cashflow(0.625, 10, dirtyp[10,3]))
+ytmCAN1.25Feb2827at1.13 <- ytm(cashflow(0.625, 10, dirtyp[10,4]))
+ytmCAN1.25Feb2827at1.14 <- ytm(cashflow(0.625, 10, dirtyp[10,5]))
+ytmCAN1.25Feb2827at1.17 <- ytm(cashflow(0.625, 10, dirtyp[10,6]))
+ytmCAN1.25Feb2827at1.18 <- ytm(cashflow(0.625, 10, dirtyp[10,7]))
+ytmCAN1.25Feb2827at1.19 <- ytm(cashflow(0.625, 10, dirtyp[10,8]))
+ytmCAN1.25Feb2827at1.20 <- ytm(cashflow(0.625, 10, dirtyp[10,9]))
+ytmCAN1.25Feb2827at1.21 <- ytm(cashflow(0.625, 10, dirtyp[10,10]))
+
+ytmCAN1.25Feb2827 <- c(ytmCAN1.25Feb2827at1.10, ytmCAN1.25Feb2827at1.11, ytmCAN1.25Feb2827at1.12, ytmCAN1.25Feb2827at1.13, ytmCAN1.25Feb2827at1.14, ytmCAN1.25Feb2827at1.17, ytmCAN1.25Feb2827at1.18, ytmCAN1.25Feb2827at1.19, ytmCAN1.25Feb2827at1.20, ytmCAN1.25Feb2827at1.21)
+```
+
+# Now we have finished calculating the ytms of all 10 selected bond, we will now plot them into a graph
+```{r}
+# First of all, put all ytms into a matrix to make everything easier
+bondsytms <- rbind(ytmCAN0.25Jul3122, ytmCAN0.25Jan3123, ytmCAN0.25Jul3123, ytmCAN0.75Jan3124, ytmCAN1.5Aug3124, ytmCAN1.25Feb2825, ytmCAN0.5Aug3125, ytmCAN0.25Feb2826, ytmsCAN1Aug3126, ytmCAN1.25Feb2827)
+
+# Since the bonds are compounding semi-annually, the actual ytm should be multipled by 2 
+fytm <- 2 * bondsytms
+# Change this matrix to dataframe
+ytmdata <- data.frame(fytm)
+# Name the row names as bond names
+rownames(ytmdata) <- bondprice$Name
+
+# Plot the 5-year yield curve correspond to each day of data
+# create a vector of colors for the plot
+culer <- c(rgb(.66, .12, .85), rgb(.12, .66, .85), rgb(.85, .66, .12), rgb(.20, .40, .60), rgb(.60, .40, .20), rgb(.20, .60, .40), rgb(.10, .30, .90), rgb(.90, .30, .10), rgb(.30, .90, .10), rgb(.17, .64, .31))
+# Create the xlab which is time to maturity
+x <- c(0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)
+
+# The yield curve using price of 1.10
+plot(x, ytmdata$dp1.10, col = culer[1], type = "l", main = "5-Year Yield Curve of Canadian Government Issued Bonds", xlab = "Time to Maturity", ylab = "Yield to Maturity", ylim=c(-0.0025, 0.018))
+# The yield curve using price of 1.11
+lines(x, ytmdata$dp1.11,col = culer[2], type = "l")
+# The yield curve using price of 1.12
+lines(x, ytmdata$dp1.12,col = culer[3], type = "l")
+# The yield curve using price of 1.13
+lines(x, ytmdata$dp1.13,col = culer[4], type = "l")
+# The yield curve using price of 1.14
+lines(x, ytmdata$dp1.14,col = culer[5], type = "l")
+# The yield curve using price of 1.17
+lines(x, ytmdata$dp1.17,col = culer[6], type = "l")
+# The yield curve using price of 1.18
+lines(x, ytmdata$dp1.18,col = culer[7], type = "l")
+# The yield curve using price of 1.19
+lines(x, ytmdata$dp1.19,col = culer[8], type = "l")
+# The yield curve using price of 1.20
+lines(x, ytmdata$dp1.20,col = culer[9], type = "l")
+# The yield curve using price of 1.21
+lines(x, ytmdata$dp1.21,col = culer[10], type = "l")
+
+# Create the legend, since the yield curve is calculated from the prices of these ten days, we name the lines by its price data
+curvename <- c("Jan 10 2022", "Jan 11 2022", "Jan 12 2022", "Jan 13 2022", "Jan 14 2022", "Jan 17 2022", "Jan 18 2022", "Jan 19 2022", "Jan 20 2022", "Jan 21 2022")
+
+legend("bottomright", legend = curvename, col = culer, lty=1.2)
+
+
+```
+#Now we have done plotting the yield curve.
+
+# 4(b)Since spot rate is a function of time t, so I will use instantaneuous compounding to calculate spot rate. 
+# We know that the spot rate of bonds which mature within a year, the spot rate is equal to its ytm. So we can easily calculate this spot rate. Then, we use bootstrapping. Since we know the dirty price, cash flow of bonds, the 0.5 year spot curve and the face value. The only unkonwn in the bootstapping equation the next spot rate and it is calculatable in this case.
+```{r}
+# First we calculate the spot rate at time 0.5, here dp is dirty price of bond CAN 0.25 Jul 31 22, t is time and since we already know the face value of all bonds are 100, we do not include a face value variable in the function
+r0.5 <- function(dp, t){
+  r0.5 <- -log(dp/100)/t
+  return(r0.5)
+}
+# Since this is the spot rate at time 0.5, we need to divide this by 2.
+spot0.5 <- 0.5* r0.5(dirtyp[1,], 0.5)
+```
+
+# Now we build the function to calculate the spot rate at time 1
+```{r}
+# Since we have the spot rate at t=0.5 and everything else except for spot rate at t=1, we can set up the bootstrapping equation to figure it out. here cp2 = face value + coupon payment = cp + 100
+r1 <- function(dp, r0.5, t1, t2, cp1, cp2){
+  # calculate the the part at t= 0.5
+  part <- cp1 * exp(-r0.5 * t1)
+  r1 <- log((dp - part)/cp2)/-t2
+  return(r1)
+}
+# Find the spot rate at t = 1
+spot1 <- r1(dirtyp[2,], spot0.5, 0.5, 1, 0.125, 100.125)
+
+# Write a function for spot rate at t = 1.5
+r1.5 <- function(dp, r0.5, r1, t1, t2, t3, cp1, cp2, cp3){
+  # calculate the parts at t = 0.5 , 1
+  part <- cp1 * exp(-r0.5 * t1) + cp2 *  exp(-r1 * t2)
+  r1.5 <- log((dp - part)/cp3)/-t3
+  return(r1.5)
+}
+# Find the spot rate at t = 1.5
+spot1.5 <- r1.5(dirtyp[3,], spot0.5, spot1, 0.5, 1, 1.5, 0.125, 0.125, 100.125)
+
+# Write a function for spot rate at t = 2
+r2 <- function(dp, r0.5, r1, r1.5, t1, t2, t3, t4, cp1, cp2, cp3, cp4){
+  # calculate the parts at t = 0.5 , 1, 1.5
+  part <- cp1 * exp(-r0.5 * t1) + cp2 *  exp(-r1 * t2) + cp3 *  exp(-r1.5 * t3)
+  r2 <- log((dp - part)/cp4)/-t4
+  return(r2)
+}
+# Find the spot rate at t = 2
+spot2 <- r2(dirtyp[4,], spot0.5, spot1, spot1.5, 0.5, 1, 1.5, 2, 0.125, 0.125, 0.125, 100.375)
+
+# Write a function for spot rate at t = 2.5
+r2.5 <- function(dp, r0.5, r1, r1.5, r2, t1, t2, t3, t4, t5, cp1, cp2, cp3, cp4, cp5){
+  # calculate the parts at t = 0.5 , 1, 1.5, 2
+  part <- cp1 * exp(-r0.5 * t1) + cp2 *  exp(-r1 * t2) + cp3 *  exp(-r1.5 * t3) + cp4 *  exp(-r2 * t4)
+  r2.5 <- log((dp - part)/cp5)/-t5
+  return(r2.5)
+}
+# Find the spot rate at t = 2.5
+spot2.5 <- r2.5(dirtyp[5,], spot0.5, spot1, spot1.5, spot2, 0.5, 1, 1.5, 2, 2.5, 0.125, 0.125, 0.125, 0.375, 100.75)
+
+# We have done 5 spot rates, I will calculate the rest in the next chunk
+
+```
+
+# The rest 5 spot rates
+```{r}
+# Write a function for spot rate at t = 3
+r3 <- function(dp, r0.5, r1, r1.5, r2, r2.5, t1, t2, t3, t4, t5, t6, cp1, cp2, cp3, cp4, cp5, cp6){
+  # calculate the parts at t = 0.5 , 1, 1.5, 2, 2.5
+  part <- cp1 * exp(-r0.5 * t1) + cp2 *  exp(-r1 * t2) + cp3 *  exp(-r1.5 * t3) + cp4 *  exp(-r2 * t4) + cp5 *  exp(-r2.5 * t5)
+  r3 <- log((dp - part)/cp6)/-t6
+  return(r3)
+}
+# Find the spot rate at t = 3
+spot3 <- r3(dirtyp[6,], spot0.5, spot1, spot1.5, spot2, spot2.5, 0.5, 1, 1.5, 2, 2.5, 3, 0.125, 0.125, 0.125, 0.375, 0.75, 100.625)
+
+# Write a function for spot rate at t = 3.5
+r3.5 <- function(dp, r0.5, r1, r1.5, r2, r2.5, r3, t1, t2, t3, t4, t5, t6, t7, cp1, cp2, cp3, cp4, cp5, cp6, cp7){
+  # calculate the parts at t = 0.5 , 1, 1.5, 2, 2.5, 3
+  part <- cp1 * exp(-r0.5 * t1) + cp2 *  exp(-r1 * t2) + cp3 *  exp(-r1.5 * t3) + cp4 *  exp(-r2 * t4) + cp5 *  exp(-r2.5 * t5) + cp6 *  exp(-r3 * t6)
+  r3.5 <- log((dp - part)/cp7)/-t7
+  return(r3.5)
+}
+# Find the spot rate at t = 3.5
+spot3.5 <- r3.5(dirtyp[7,], spot0.5, spot1, spot1.5, spot2, spot2.5, spot3, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 0.125, 0.125, 0.125, 0.375, 0.75, 0.625, 100.25)
+
+# Write a function for spot rate at t = 4
+r4 <- function(dp, r0.5, r1, r1.5, r2, r2.5, r3, r3.5, t1, t2, t3, t4, t5, t6, t7, t8, cp1, cp2, cp3, cp4, cp5, cp6, cp7, cp8){
+  # calculate the parts at t = 0.5 , 1, 1.5, 2, 2.5, 3, 3.5
+  part <- cp1 * exp(-r0.5 * t1) + cp2 *  exp(-r1 * t2) + cp3 *  exp(-r1.5 * t3) + cp4 *  exp(-r2 * t4) + cp5 *  exp(-r2.5 * t5) + cp6 *  exp(-r3 * t6) + cp7 *  exp(-r3.5 * t7)
+  r4 <- log((dp - part)/cp8)/-t8
+  return(r4)
+}
+# Find the spot rate at t = 4
+spot4 <- r4(dirtyp[8,], spot0.5, spot1, spot1.5, spot2, spot2.5, spot3, spot3.5, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 0.125, 0.125, 0.125, 0.375, 0.75, 0.625, 0.25, 100.125)
+
+# Write a function for spot rate at t = 4.5
+r4.5 <- function(dp, r0.5, r1, r1.5, r2, r2.5, r3, r3.5, r4, t1, t2, t3, t4, t5, t6, t7, t8, t9, cp1, cp2, cp3, cp4, cp5, cp6, cp7, cp8, cp9){
+  # calculate the parts at t = 0.5 , 1, 1.5, 2, 2.5, 3, 3.5, 4
+  part <- cp1 * exp(-r0.5 * t1) + cp2 *  exp(-r1 * t2) + cp3 *  exp(-r1.5 * t3) + cp4 *  exp(-r2 * t4) + cp5 *  exp(-r2.5 * t5) + cp6 *  exp(-r3 * t6) + cp7 *  exp(-r3.5 * t7) + cp8 *  exp(-r4 * t8)
+  r4.5 <- log((dp - part)/cp9)/-t9
+  return(r4.5)
+}
+# Find the spot rate at t = 4.5
+spot4.5 <- r4.5(dirtyp[9,], spot0.5, spot1, spot1.5, spot2, spot2.5, spot3, spot3.5, spot4, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 0.125, 0.125, 0.125, 0.375, 0.75, 0.625, 0.25, 0.125, 100.5)
+
+# Write a function for spot rate at t = 4.5
+r4.5 <- function(dp, r0.5, r1, r1.5, r2, r2.5, r3, r3.5, r4, t1, t2, t3, t4, t5, t6, t7, t8, t9, cp1, cp2, cp3, cp4, cp5, cp6, cp7, cp8, cp9){
+  # calculate the parts at t = 0.5 , 1, 1.5, 2, 2.5, 3, 3.5, 4
+  part <- cp1 * exp(-r0.5 * t1) + cp2 *  exp(-r1 * t2) + cp3 *  exp(-r1.5 * t3) + cp4 *  exp(-r2 * t4) + cp5 *  exp(-r2.5 * t5) + cp6 *  exp(-r3 * t6) + cp7 *  exp(-r3.5 * t7) + cp8 *  exp(-r4 * t8)
+  r4.5 <- log((dp - part)/cp9)/-t9
+  return(r4.5)
+}
+# Find the spot rate at t = 4.5
+spot4.5 <- r4.5(dirtyp[9,], spot0.5, spot1, spot1.5, spot2, spot2.5, spot3, spot3.5, spot4, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 0.125, 0.125, 0.125, 0.375, 0.75, 0.625, 0.25, 0.125, 100.5)
+
+# Write a function for spot rate at t = 5
+r5 <- function(dp, r0.5, r1, r1.5, r2, r2.5, r3, r3.5, r4, r4.5, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, cp1, cp2, cp3, cp4, cp5, cp6, cp7, cp8, cp9, cp10){
+  # calculate the parts at t = 0.5 , 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5
+  part <- cp1 * exp(-r0.5 * t1) + cp2 *  exp(-r1 * t2) + cp3 *  exp(-r1.5 * t3) + cp4 *  exp(-r2 * t4) + cp5 *  exp(-r2.5 * t5) + cp6 *  exp(-r3 * t6) + cp7 *  exp(-r3.5 * t7) + cp8 *  exp(-r4 * t8) + cp9 *  exp(-r4.5 * t9)
+  r5 <- log((dp - part)/cp10)/-t10
+  return(r5)
+}
+# Find the spot rate at t = 5
+spot5 <- r5(dirtyp[10,], spot0.5, spot1, spot1.5, spot2, spot2.5, spot3, spot3.5, spot4, spot4.5, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 0.125, 0.125, 0.125, 0.375, 0.75, 0.625, 0.25, 0.125, 0.5, 100.625)
+
+
+```
+
+# Now we have  the spot rates, we plot the spot curve
+```{r}
+# put the spot rates to a matrix
+spotrate <- rbind(spot0.5, spot1, spot1.5, spot2, spot2.5, spot3, spot3.5, spot4, spot4.5, spot5)
+# Change this matrix to dataframe
+spotdata <- data.frame(spotrate)
+# Name the row names as bond names
+rownames(spotdata) <- bondprice$Name
+
+# Plot the 5-year spot curve correspond to each day of data
+# create a vector of colors for the plot
+culer <- c(rgb(.66, .12, .85), rgb(.12, .66, .85), rgb(.85, .66, .12), rgb(.20, .40, .60), rgb(.60, .40, .20), rgb(.20, .60, .40), rgb(.10, .30, .90), rgb(.90, .30, .10), rgb(.30, .90, .10), rgb(.17, .64, .31))
+# Create the xlab which is time 
+x <- c(0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)
+
+# The spot curve using price of 1.10
+plot(x, spotdata$dp1.10, col = culer[1], type = "l", main = "5-Year Spot Curve of Canadian Government Issued Bonds", xlab = "Time (Year)", ylab = "Spot Rate", ylim=c(-0.0025, 0.019))
+# The spot curve using price of 1.11
+lines(x, spotdata$dp1.11,col = culer[2], type = "l")
+# The spot curve using price of 1.12
+lines(x, spotdata$dp1.12,col = culer[3], type = "l")
+# The spot curve using price of 1.13
+lines(x, spotdata$dp1.13,col = culer[4], type = "l")
+# The spot curve using price of 1.14
+lines(x, spotdata$dp1.14,col = culer[5], type = "l")
+# The spot curve using price of 1.17
+lines(x, spotdata$dp1.17,col = culer[6], type = "l")
+# The spot curve using price of 1.18
+lines(x, spotdata$dp1.18,col = culer[7], type = "l")
+# The spot curve using price of 1.19
+lines(x, spotdata$dp1.19,col = culer[8], type = "l")
+# The spot curve using price of 1.20
+lines(x, spotdata$dp1.20,col = culer[9], type = "l")
+# The spot curve using price of 1.21
+lines(x, spotdata$dp1.21,col = culer[10], type = "l")
+
+# Create the legend, since the spot curve is calculated from the prices of these ten days, we name the lines by its price data
+curvename <- c("Jan 10 2022", "Jan 11 2022", "Jan 12 2022", "Jan 13 2022", "Jan 14 2022", "Jan 17 2022", "Jan 18 2022", "Jan 19 2022", "Jan 20 2022", "Jan 21 2022")
+
+legend("bottomright", legend = curvename, col = culer, lty=1.2, cex = 0.8)
+```
+
+# 4(c) According to the formula on note of week 2 slide 9, we can see that forward yield can be calculated from 2 spot rates. We simplify the equation and get -(-r2*(T2-t)-(-r1(T1-t)))/(T2- T1), then we can acquire forward yield by spot rates.
+```{r}
+# Now we nuild a calculator to find forward rate
+# r1 is the spot rate at T1, r2 is the spot rate at T2
+forward <- function(t, T1, T2, r1, r2){
+  a <- - r2 * (T2 - t)
+  b <- - r1 * (T1 - t)
+  forward <- - (a-b)/(T2-T1)
+  return(forward)
+}
+
+# To the notations clear, the 1yr-1yr forward rate means t = 0, T1 = 1 and T2 = 2
+# Calculate the 1yr-1yr forward rate
+oneyr_1yr_rate <- forward(0, 1, 2, spotrate[2,], spotrate[4,])
+
+# Calculate the 1yr-1yr forward rate
+oneyr_2yr_rate <- forward(0, 1, 3, spotrate[2,], spotrate[6,])
+
+# Calculate the 1yr-1yr forward rate
+oneyr_3yr_rate <- forward(0, 1, 4, spotrate[2,], spotrate[8,])
+
+# Calculate the 1yr-1yr forward rate
+oneyr_4yr_rate <- forward(0, 1, 5, spotrate[2,], spotrate[10,])
+
+# put the forward rates to a matrix
+forwardrate <- rbind(oneyr_1yr_rate, oneyr_2yr_rate, oneyr_3yr_rate, oneyr_4yr_rate)
+# Change this matrix to dataframe
+forwarddata <- data.frame(forwardrate)
+
+# Now the calculations are done, we make plots now.
+# Plot the 1-year forward curve with terms ranging from 2 to 5 years correspond to each day of data
+# create a vector of colors for the plot
+culer <- c(rgb(.66, .12, .85), rgb(.12, .66, .85), rgb(.85, .66, .12), rgb(.20, .40, .60), rgb(.60, .40, .20), rgb(.20, .60, .40), rgb(.10, .30, .90), rgb(.90, .30, .10), rgb(.30, .90, .10), rgb(.17, .64, .31))
+# Create xlab which is time 
+x <- c(2, 3, 4, 5)
+
+# The forward curve using price of 1.10
+plot(x, forwarddata$dp1.10, col = culer[1], type = "l", main = "1-year forward curve with terms ranging from 2 to 5 years", xlab = "Time (Year)", ylab = "Forward Rate", ylim=c(0.002, 0.025))
+# The forward curve using price of 1.11
+lines(x, forwarddata$dp1.11,col = culer[2], type = "l")
+# The forward curve using price of 1.12
+lines(x, forwarddata$dp1.12,col = culer[3], type = "l")
+# The forward curve using price of 1.13
+lines(x, forwarddata$dp1.13,col = culer[4], type = "l")
+# The forward curve using price of 1.14
+lines(x, forwarddata$dp1.14,col = culer[5], type = "l")
+# The forward curve using price of 1.17
+lines(x, forwarddata$dp1.17,col = culer[6], type = "l")
+# The forward curve using price of 1.18
+lines(x, forwarddata$dp1.18,col = culer[7], type = "l")
+# The forward curve using price of 1.19
+lines(x, forwarddata$dp1.19,col = culer[8], type = "l")
+# The forward curve using price of 1.20
+lines(x, forwarddata$dp1.20,col = culer[9], type = "l")
+# The forward curve using price of 1.21
+lines(x, forwarddata$dp1.21,col = culer[10], type = "l")
+
+# Create the legend, since the forward curve is calculated from the prices of these ten days, we name the lines by its price data
+curvename <- c("Jan 10 2022", "Jan 11 2022", "Jan 12 2022", "Jan 13 2022", "Jan 14 2022", "Jan 17 2022", "Jan 18 2022", "Jan 19 2022", "Jan 20 2022", "Jan 21 2022")
+
+legend("topleft", legend = curvename, col = culer, lty=1.2, cex = 0.8)
+
+
+
+
+```
+
+# Now Move to Q5
+```{r}
+# build a function to calculate the log returns of yield
+# here r1 means r1,1 and r2 means r1,2
+logyield <- function(r1, r2){
+  logr <- log(r2 / r1)
+  return(logr)
+}
+
+# we use for loop to calculate xi,j s
+y <- c(1:9)
+
+# calculate x1,j, using the ytm at year 1
+x1 <- vector("numeric", 9)
+for(i in y){
+  x <- logyield(ytmdata[2,i], ytmdata[2,i+1])
+  x1[i] <- x
+}
+
+# calculate x2,j, using the ytm at year 2
+x2 <- vector("numeric", 9)
+for(i in y){
+  x <- logyield(ytmdata[4,i], ytmdata[4,i+1])
+  x2[i] <- x
+}
+
+# calculate x3,j, using the ytm at year 3
+x3 <- vector("numeric", 9)
+for(i in y){
+  x <- logyield(ytmdata[6,i], ytmdata[6,i+1])
+  x3[i] <- x
+}
+# calculate x4,j, using the ytm at year 4
+x4 <- vector("numeric", 9)
+for(i in y){
+  x <- logyield(ytmdata[8,i], ytmdata[8,i+1])
+  x4[i] <- x
+}
+# calculate x5,j, using the ytm at year 5
+x5 <- vector("numeric", 9)
+for(i in y){
+  x <- logyield(ytmdata[10,i], ytmdata[10,i+1])
+  x5[i] <- x
+}
+
+# build a matrix with these xi,j s
+xmatrix <- cbind(x1, x2, x3, x4, x5)
+# create the covariance matrix of daily log-returns of yield
+cov_logreturns_of_yield <- cov(xmatrix)
+print(cov_logreturns_of_yield)
+```
+
+# now we do the same to find covariance matrix of daily log-return of forward rates
+```{r}
+# calculate x1,j, using the ytm at year 1
+fx1 <- vector("numeric", 9)
+for(i in y){
+  x <- logyield(forwarddata[1,i], forwarddata[1,i+1])
+  fx1[i] <- x
+}
+
+# calculate x2,j, using the ytm at year 2
+fx2 <- vector("numeric", 9)
+for(i in y){
+  x <- logyield(forwarddata[2,i], forwarddata[2,i+1])
+  fx2[i] <- x
+}
+
+# calculate x3,j, using the ytm at year 3
+fx3 <- vector("numeric", 9)
+for(i in y){
+  x <- logyield(forwarddata[3,i], forwarddata[3,i+1])
+  fx3[i] <- x
+}
+# calculate x4,j, using the ytm at year 4
+fx4 <- vector("numeric", 9)
+for(i in y){
+  x <- logyield(forwarddata[4,i], forwarddata[4,i+1])
+  fx4[i] <- x
+}
+
+
+
+# build a matrix with these xi,j s
+forwardxmatrix <- cbind(fx1, fx2, fx3, fx4)
+# create the covariance matrix of daily log-returns of yield
+cov_logreturns_of_forward <- cov(forwardxmatrix)
+print(cov_logreturns_of_forward)
+```
+
+# 6: Now we calculate the eigenvalues and eigenvectors
+```{r}
+# Calculate eigenvalue and eigenvector of cov_logreturns_of_yield
+e_yield <- eigen(cov_logreturns_of_yield)
+e_yield$values
+e_yield$vectors
+
+# Calculate eigenvalue and eigenvector of cov_logreturns_of_forward
+e_forward <- eigen(cov_logreturns_of_forward)
+e_forward$values
+e_forward$vectors
+```
+However, we can see a number (in red bracket) in the two largest vector has different sign. These two values correspond to ytm of bonds matures in 1 year and 2 years and 1yr-1yr forward rate. Both rates are calculated from bond CAN 0.25 Jan 31 23 & CAN 0.75 Jan 31 24. And since the bond matures in 2 years was issued on 10/21/2022, so there is no previous coupon payment, thus there is no dirty price for this bond. Hence the ytm and spot rate at t = 2, differ from the trend significantly (Can see this in my plots of 4(a) and 4(b). 
+
+Further, the coupon payment for the 1-year and 2- year bonds differ significantly as well. Although there is no insane coupon rate like 6% or something, the latter rate is still 3 times the front one. (0.75% to 0.25%) The two reasons combine result in a value of different sign in the largest eigenvectors. 
+
